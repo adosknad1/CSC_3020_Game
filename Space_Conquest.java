@@ -26,22 +26,36 @@ class World {
         commander.add(doubleLaser.copyAttack());
         commander.add(laserArray.copyAttack());
 
-        player.activeShips.add(commander.copyShip());
+        player.ships.add(commander.copyShip());
         Ship grunt = new Ship("Grunt", 25, laserShot);
         Ship doubleShotGrunt = new Ship("Double Shot Grunt", 25, doubleLaser.copyAttack());
         Ship laserArrayGrunt = new Ship("Laser Array Grunt", 25, laserArray.copyAttack());
         Ship armorGrunt = new Ship("Armor Grunt", 25, laserShot.copyAttack(), 5);
-        Ship bossGrunt = new Ship("Boss Grunt", 50, laserArray.copyAttack());
-        bossGrunt.add(doubleLaser.copyAttack());
+        Ship bossGrunt = new Ship("Boss Grunt", 50, doubleLaser.copyAttack());
+        bossGrunt.add(laserShot.copyAttack());
 
         
-        Battle battle1 = new Battle("Sample Battle");
+        Battle battle1 = new Battle("Planet 1 small fleet");
         battle1.add(grunt.copyShip());
         battle1.add(grunt.copyShip());
         
+
+        Battle battle2 = new Battle("Planet 1 big fleet");
+        battle2.add(doubleShotGrunt.copyShip());
+        battle2.add(laserArrayGrunt.copyShip());
+        battle2.add(grunt.copyShip());
+        battle2.add(grunt.copyShip());
+
+        Battle battle3 = new Battle("Sample Battle 3");
+        battle3.add(bossGrunt.copyShip());
+        battle3.add(grunt.copyShip());
+        battle3.add(grunt.copyShip());
+
         planets = new Planet[8];
         planets[0] = new Planet("Planet 1");
         planets[0].add(battle1);
+        planets[0].add(battle2);
+        planets[0].add(battle3);
 
         planets[1] = new Planet("Planet 2");
         planets[2] = new Planet("Planet 3");
@@ -153,19 +167,42 @@ class Planet {
 class Battle {
     String name;
     ArrayList<Ship> enemies;
+    ArrayList<Ship> activeEnemies;
+
     Battle(String n) {
         name = n;
         enemies = new ArrayList<>();
+        activeEnemies = new ArrayList<>();
+        
+    }
+
+    void printEnemiesStatus() {
+        System.out.println("Enemies Status:");
+        for (int i = 0; i < activeEnemies.size(); i++) {
+            System.out.println((i + 1) + ": " + activeEnemies.get(i).getInfoString());
+        }
+    }
+
+    void printFriendlyStatus() {
+        System.out.println("Your Status:");
+        for (int i = 0; i < World.player.activeShips.size(); i++) {
+            System.out.println((i + 1) + ": " + World.player.activeShips.get(i).getInfoString());
+        }
     }
 
     void resetEnemies() {
+        activeEnemies.clear();
         for (int i = 0; i < enemies.size(); i++) {
-            enemies.get(i).hp = enemies.get(i).maxHp;
+            activeEnemies.add(enemies.get(i).copyShip());
         }
     }
 
     boolean enter() {
         System.out.println("Now entering battle with " + name);
+        World.player.resetActiveShips();
+        resetEnemies();
+        printEnemiesStatus();
+
         while (friendlyTurn()) {
             if (!enemyTurn()) {
                 break;
@@ -177,17 +214,34 @@ class Battle {
         }
         else {
             System.out.println("You won!");
+            World.player.levelUp();
             return true;
         }
     }
 
+    void enemyCheck() {
+        for (int i = 0; i < activeEnemies.size(); i++) {
+            if (activeEnemies.get(i).isDefeated()) {
+                System.out.println(activeEnemies.get(i).name + " was defeated!");
+                activeEnemies.remove(i);
+                i--;
+            }
+        }
+    }
+
     boolean friendlyTurn() {
+        printFriendlyStatus();
+        printEnemiesStatus();
         for (int i = 0; i < World.player.activeShips.size(); i++) {
             Ship curShip = World.player.activeShips.get(i);
-            curShip.performChosenAttack(enemies);
+            curShip.performChosenAttack(activeEnemies);
+            enemyCheck();
             if (playerDefeated() || enemiesDefeated()) {
                 return false;
             }
+            System.out.println("Press enter to continue");
+            World.scanner.nextLine();
+            World.scanner.nextLine();
         }
         return true;
     }
@@ -199,17 +253,13 @@ class Battle {
             if (playerDefeated() || enemiesDefeated()) {
                 return false;
             }
+            enemyCheck();
         }
         return true;
     }
 
     boolean enemiesDefeated() {
-        for (int i = 0; i < enemies.size(); i++) {
-            if (!enemies.get(i).isDefeated()) {
-                return false;
-            } 
-        }
-        return true;
+        return activeEnemies.size() == 0;
     }
 
     boolean playerDefeated() {
@@ -224,16 +274,6 @@ class Battle {
 
     void add(Ship s) {
         enemies.add(s);
-    }
-}
-
-class Player {
-    String name;
-    int level, hp;
-    Player(String n) {
-        name = n;
-        level = 1;
-        hp = 100;
     }
 }
 
@@ -347,10 +387,20 @@ class Ship {
         System.out.println("Choose attack: ");
         int attack = chooseAttack();
 
-        System.out.println("Choose target: ");
-        int target = chooseTarget(targets);
+        if (attack == attacks.size()) {
+            return false;
+        }
 
-        if (attack == attacks.size() || target == targets.size()) {
+        int target;
+        if (attacks.get(attack).hitsAll) {
+            attacks.get(attack).hit(targets);
+            return true;
+        }
+
+        System.out.println("Choose target: ");
+        target = chooseTarget(targets);
+
+        if (target == targets.size()) {
             return false;
         }
 
@@ -426,6 +476,12 @@ class Attack {
     void hit(Ship s) {
         System.out.println(name + " attacks " + s.name + " for " + damage + " damage");
         s.attackWith(damage);
+    }
+
+    void hit(ArrayList<Ship> targets) {
+        for (int i = 0; i < targets.size(); i++) {
+            hit(targets.get(i));
+        }
     }
 
     void levelUp() {
@@ -525,8 +581,13 @@ class PlayerCharacter {
         ships = new ArrayList<>();
         activeShips = new ArrayList<>();
         items = new ArrayList<>();
-
         name = n;
+    }
+
+    void levelUp() {
+        for (int i = 0; i < ships.size(); i++) {
+            ships.get(i).levelUp();
+        }
     }
 
     void listShips() {
@@ -534,7 +595,6 @@ class PlayerCharacter {
         for (int i = 0; i < ships.size(); i++) {
             System.out.println((i + 1)+": " + ships.get(i).getInfoString());
         }
-        System.out.println((ships.size() + 1) + ": cancel");
     }
 
     void listNonCommanderShips() {
@@ -554,10 +614,14 @@ class PlayerCharacter {
     }
 
     void chooseActiveShips() {
-       
+        listShips();
         activeShips.clear();
-        activeShips.add(ships.get(0)); // adding commander
+        activeShips.add(ships.get(0).copyShip()); // adding commander
         
+    }
+
+    void resetActiveShips() {
+        chooseActiveShips();
     }
 
     int chooseFriendlyShip() {
